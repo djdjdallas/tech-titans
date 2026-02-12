@@ -1,0 +1,634 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TECH TITANS - SELECT YOUR FIGHTER</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three/": "https://esm.sh/three@^0.182.0/"
+  }
+}
+</script>
+
+    <style>
+        :root {
+            --theme-color: #4A9EFF;
+            --bg-color: #08080c;
+            /* High opacity dark background for maximum readability */
+            --glass-bg: rgba(10, 12, 18, 0.96);
+            --border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* --- VISUAL EFFECTS --- */
+        #scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.1; /* Reduced from 0.6 for better readability */
+        }
+
+        #vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(0,0,0,0) 50%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+            z-index: 99;
+        }
+
+        #bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: -1;
+        }
+
+        /* --- 3D CONTAINER --- */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
+            color: var(--theme-color);
+            font-size: 1.5rem;
+            letter-spacing: 4px;
+            animation: pulse 1s infinite alternate;
+            z-index: 2;
+            text-shadow: 0 0 10px var(--theme-color);
+            display: none;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* --- UI LAYOUT --- */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: grid;
+            grid-template-columns: 350px 1fr 350px;
+            grid-template-rows: 1fr 140px;
+            padding: 40px;
+            pointer-events: none; /* Let clicks pass through to 3D where empty */
+        }
+
+        .panel {
+            pointer-events: auto;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            backdrop-filter: blur(15px);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 4px 30px rgba(0,0,0,0.8);
+            transition: all 0.3s ease;
+        }
+        
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px;
+            height: 2px;
+            background: var(--theme-color);
+            box-shadow: 0 0 15px var(--theme-color);
+            transition: background 0.5s ease;
+        }
+
+        .panel-left {
+            grid-column: 1;
+            grid-row: 1;
+            transform: skewX(-5deg);
+            margin-right: 20px;
+            border-bottom-left-radius: 20px;
+        }
+
+        .panel-right {
+            grid-column: 3;
+            grid-row: 1;
+            transform: skewX(5deg);
+            margin-left: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        .content-fix {
+            transform: skewX(5deg); /* Counter skew for left panel text */
+        }
+        .content-fix-right {
+            transform: skewX(-5deg); /* Counter skew for right panel text */
+        }
+
+        /* --- LEFT PANEL: INFO --- */
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 2.5rem;
+            margin: 0;
+            text-transform: uppercase;
+            line-height: 0.9;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .class-badge {
+            display: inline-block;
+            background: var(--theme-color);
+            color: black;
+            font-weight: 800;
+            padding: 2px 8px;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .real-name {
+            color: #ffffff;
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 2px rgba(0,0,0,0.8);
+        }
+
+        .company {
+            color: #e0e0e0;
+            font-size: 0.95rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            color: var(--theme-color);
+            margin-top: 30px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--theme-color);
+            padding-left: 10px;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .skill-card {
+            background: rgba(0, 0, 0, 0.4);
+            margin-bottom: 10px;
+            padding: 12px;
+            border-left: 2px solid rgba(255,255,255,0.3);
+            border-radius: 0 4px 4px 0;
+        }
+
+        .skill-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .skill-icon {
+            font-size: 1.5rem;
+            margin-right: 10px;
+            filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));
+        }
+
+        .skill-name {
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .skill-desc {
+            font-size: 0.9rem;
+            color: #f0f0f0;
+            line-height: 1.35;
+        }
+
+        .ultimate-card {
+            background: linear-gradient(45deg, rgba(0,0,0,0.4), rgba(var(--theme-rgb), 0.3));
+            border: 1px solid var(--theme-color);
+            padding: 15px;
+            margin-top: 15px;
+            box-shadow: 0 0 15px rgba(var(--theme-rgb), 0.1);
+        }
+
+        .quote {
+            margin-top: auto;
+            font-style: italic;
+            color: #cccccc;
+            font-size: 1.05rem;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 20px;
+            text-shadow: 0 1px 2px rgba(0,0,0,1);
+        }
+
+        /* --- RIGHT PANEL: STATS --- */
+        .stat-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-label {
+            width: 50px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .stat-bar-container {
+            flex-grow: 1;
+            height: 12px;
+            background: rgba(0,0,0,0.6);
+            margin: 0 15px;
+            transform: skewX(-15deg);
+            border: 1px solid rgba(255,255,255,0.2);
+            position: relative;
+        }
+
+        .stat-bar-fill {
+            height: 100%;
+            background: var(--theme-color);
+            width: 0%; /* JS will animate */
+            box-shadow: 0 0 10px var(--theme-color);
+            transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .stat-value {
+            width: 40px;
+            text-align: right;
+            font-family: 'Orbitron', sans-serif;
+            color: var(--theme-color);
+            font-weight: bold;
+        }
+
+        .total-power {
+            margin-top: auto;
+            text-align: center;
+            background: rgba(0,0,0,0.6);
+            padding: 20px;
+            border: 1px solid var(--theme-color);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        .power-label {
+            font-size: 0.9rem;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .power-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 0 20px var(--theme-color);
+        }
+
+        /* --- ROSTER --- */
+        #roster-container {
+            grid-column: 1 / span 3;
+            grid-row: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            pointer-events: auto;
+            z-index: 20;
+        }
+
+        .roster-item {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid #555;
+            background: #1a1a1a;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: #888;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            text-align: center;
+        }
+
+        .roster-item:hover {
+            transform: scale(1.1);
+            border-color: white;
+            color: white;
+            background: #2a2a2a;
+        }
+
+        .roster-item.active {
+            transform: scale(1.2);
+            border-color: var(--theme-color);
+            box-shadow: 0 0 20px var(--theme-color), inset 0 0 10px var(--theme-color);
+            background: #222;
+            color: white;
+        }
+        
+        /* Pseudo-element for the colored ring */
+        .roster-item::after {
+            content: '';
+            position: absolute;
+            top: -5px; left: -5px; right: -5px; bottom: -5px;
+            border-radius: 50%;
+            border: 2px solid var(--theme-color);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .roster-item.active::after {
+            opacity: 1;
+            animation: spin 10s linear infinite;
+            border-top-color: transparent;
+            border-bottom-color: transparent;
+        }
+
+        /* --- ACTIONS --- */
+        .action-btn {
+            position: absolute;
+            bottom: 30px;
+            padding: 15px 40px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border: none;
+            cursor: pointer;
+            transform: skewX(-20deg);
+            transition: all 0.2s;
+            pointer-events: auto;
+        }
+
+        .action-btn span {
+            display: block;
+            transform: skewX(20deg);
+        }
+
+        #btn-confirm {
+            right: 40px;
+            background: white;
+            color: black;
+            box-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
+
+        #btn-confirm:hover {
+            background: var(--theme-color);
+            box-shadow: 0 0 30px var(--theme-color);
+            color: white;
+        }
+        
+        #btn-confirm:active {
+            transform: skewX(-20deg) scale(0.95);
+        }
+
+        #btn-back {
+            left: 40px;
+            background: rgba(0,0,0,0.5);
+            color: #aaa;
+            border: 2px solid #555;
+        }
+
+        #btn-back:hover {
+            border-color: white;
+            color: white;
+            background: rgba(0,0,0,0.8);
+        }
+        
+        /* --- NAV ARROWS --- */
+        .nav-arrow {
+            position: absolute;
+            top: 50%;
+            width: 60px;
+            height: 100px;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 50;
+            pointer-events: auto;
+            color: rgba(255,255,255,0.5);
+            transition: all 0.2s ease;
+        }
+        
+        .nav-arrow:hover {
+            color: var(--theme-color);
+            filter: drop-shadow(0 0 10px var(--theme-color));
+            transform: translateY(-50%) scale(1.1);
+        }
+        
+        .nav-arrow svg {
+            width: 100%;
+            height: 100%;
+            fill: currentColor;
+        }
+        
+        #nav-prev {
+            left: 370px; /* Positioned just to the right of the left panel */
+        }
+        
+        #nav-next {
+            right: 370px; /* Positioned just to the left of the right panel */
+        }
+
+        /* --- ANIMATIONS --- */
+        @keyframes pulse {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-50px) skewX(5deg); }
+            to { opacity: 1; transform: translateX(0) skewX(5deg); }
+        }
+        
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(50px) skewX(-5deg); }
+            to { opacity: 1; transform: translateX(0) skewX(-5deg); }
+        }
+
+        .animate-in-left {
+            animation: slideInLeft 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        
+        .animate-in-right {
+            animation: slideInRight 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        #flash-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: white;
+            z-index: 999;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .locked-in-text {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-family: 'Orbitron';
+            font-size: 5rem;
+            color: white;
+            text-shadow: 0 0 50px var(--theme-color);
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Visual Overlays -->
+    <div id="bg-grid"></div>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="flash-overlay"></div>
+    <div id="locked-message" class="locked-in-text">LOCKED IN</div>
+
+    <!-- 3D Layer -->
+    <div id="canvas-container"></div>
+    <div id="loading-indicator">INITIALIZING NEURAL LINK...</div>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <!-- Left Panel: Info -->
+        <div class="panel panel-left" id="panel-left">
+            <div class="content-fix">
+                <span class="class-badge" id="char-class">CLASS</span>
+                <h1 id="char-name">NAME</h1>
+                <div class="real-name" id="char-realname">Real Name</div>
+                <div class="company" id="char-company">COMPANY</div>
+
+                <div class="section-title">ABILITIES</div>
+                <div id="skills-container">
+                    <!-- Skills injected via JS -->
+                </div>
+
+                <div class="ultimate-card">
+                    <div class="skill-header">
+                        <span class="skill-name" style="color:var(--theme-color)">ULTIMATE: <span id="ult-name">NAME</span></span>
+                    </div>
+                    <div class="skill-desc" id="ult-desc">Description</div>
+                </div>
+
+                <div class="quote" id="char-quote">"Quote goes here."</div>
+            </div>
+        </div>
+        
+        <!-- Navigation Arrows -->
+        <div id="nav-prev" class="nav-arrow">
+            <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        </div>
+        
+        <!-- Middle: Empty for 3D View -->
+        <div></div>
+        
+        <div id="nav-next" class="nav-arrow">
+            <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </div>
+
+        <!-- Right Panel: Stats -->
+        <div class="panel panel-right" id="panel-right">
+            <div class="content-fix-right">
+                <div class="section-title" style="margin-top:0">BATTLE METRICS</div>
+                
+                <div id="stats-container">
+                    <!-- Stats injected via JS -->
+                </div>
+
+                <div class="total-power">
+                    <div class="power-label">TOTAL POWER LEVEL</div>
+                    <div class="power-value" id="total-power">0000</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom: Roster & Actions -->
+        <div id="roster-container">
+            <!-- Roster items injected via JS -->
+        </div>
+        
+        <button class="action-btn" id="btn-back"><span>ESC BACK</span></button>
+        <button class="action-btn" id="btn-confirm"><span>ENTER CONFIRM</span></button>
+    </div>
+</body>
+</html>
